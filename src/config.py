@@ -1,5 +1,10 @@
 import json
 import os
+from enum import Enum
+
+class ReportType(Enum):
+    GITHUB = "GITHUB"
+    HACK_NEWS = "HACK_NEWS"
 
 class Config:
     def __init__(self):
@@ -23,3 +28,16 @@ class Config:
             self.freq_days = config.get('github_progress_frequency_days', 1)
             # 默认早上8点更新 (操作系统默认时区是 UTC +0，08点刚好对应北京时间凌晨12点)
             self.exec_time = config.get('github_progress_execution_time', "08:00") 
+
+            # 加载并验证 report_types
+            self.report_types = [rt.value for rt in ReportType]
+
+    def _parse_report_types(self, report_types):
+        valid_types = []
+        for rt in report_types:
+            try:
+                valid_types.append(ReportType(rt))
+            except ValueError:
+                print(f"Warning: Invalid report type '{rt}' ignored.")
+        return valid_types
+

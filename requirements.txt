@@ -1,6 +1,6 @@
 requests
 openai
-gradio
+gradio==4.19.2
 loguru
 schedule
 markdown2

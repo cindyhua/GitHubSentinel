@@ -1,6 +1,6 @@
 import gradio as gr  # 导入gradio库用于创建GUI
 
-from config import Config  # 导入配置管理模块
+from config import Config, ReportType  # 确保从 config 模块导入 ReportType
 from github_client import GitHubClient  # 导入用于GitHub API操作的客户端
 from report_generator import ReportGenerator  # 导入报告生成器模块
 from llm import LLM  # 导入可能用于处理语言模型的LLM类
@@ -21,39 +21,71 @@ def export_progress_by_date_range(report_type, repo, days):
     }
     llm = LLM(json.dumps(llm_config))
     report_generator = ReportGenerator(llm)
-    # 定义一个函数，用于导出和生成指定时间范围内项目的进展报告
-    raw_file_path = github_client.export_progress_by_date_range(repo, days)  # 导出原始数据文件路径
-    report, report_file_path = report_generator.generate_report_by_date_range(raw_file_path, days)  # 生成并获取报告内容及文件路径
 
-    return report, report_file_path  # 返回报告内容和报告文件路径
+    if report_type == ReportType.GITHUB.value:
+        raw_file_path = github_client.export_progress_by_date_range(repo, days)
+    elif report_type == ReportType.HACK_NEWS.value:
+        # 这里需要实现 HackerNews 的逻辑
+        # 假设我们有一个 hackernews_client
+        from hackNews_client import HackerNewsClient
+        hackernews_client = HackerNewsClient()
+        raw_file_path = hackernews_client.fetch_and_save(1,days)
+    else:
+        raise ValueError(f"Unsupported report type: {report_type}")
+    
+    report, report_file_path = report_generator.generate_report_by_date_range(raw_file_path, days)
+    return report, report_file_path
 
 def update_subscription_list(report_type):
-    if report_type == "GITHUB":
-        return gr.Dropdown.update(choices=subscription_manager.list_subscriptions(), interactive=True)
+    print("report_type:" + report_type)
+    if report_type == ReportType.GITHUB.value:
+        subscriptions = subscription_manager.list_subscriptions()
+        return gr.Dropdown(choices=subscriptions)
+    elif report_type == ReportType.HACK_NEWS.value:
+        return gr.Dropdown(choices=["HackerNews"], value="HackerNews")
     else:
-        return gr.Dropdown.update(choices=[], value=None, interactive=False)
+        return gr.Dropdown(choices=[], value=None) 
 
-# 创建Gradio界面
-demo = gr.Interface(
-    fn=export_progress_by_date_range,  # 指定界面调用的函数
-    title="GitHubSentinel",  # 设置界面标题
-    inputs=[
-        gr.Dropdown(
+# Create Gradio interface
+with gr.Blocks(title="GitHubSentinel") as demo:
+    with gr.Row():
+        report_type = gr.Dropdown(
             choices=config.report_types,
             label="报告类型",
             info="选择报告类型"
-        ),
-        gr.Dropdown(
-            choices=subscription_manager.list_subscriptions(),
+        )
+        subscription_list = gr.Dropdown(
+            choices=subscription_manager.list_subscriptions(),  # 初始为空，将根据报告类型动态更新
             label="订阅列表",
-            info="已订阅GitHub项目"
-        ),
-        gr.Slider(value=2, minimum=1, maximum=7, step=1, label="报告周期", info="生成项目过去一段时间进展，单位：天"),
-    ],
-    outputs=[gr.Markdown(), gr.File(label="下载报告")],  # 输出格式：Markdown文本和文件下载
-)
-
-demo.inputs[0].change(fn=update_subscription_list, inputs=[demo.inputs[0]], outputs=[demo.inputs[1]])
+            info="已订阅项目"
+        )
+        days = gr.Slider(
+            value=2, 
+            minimum=1, 
+            maximum=7, 
+            step=1, 
+            label="报告周期", 
+            info="生成项目过去一段时间进展，单位：天"
+        )
+    
+    with gr.Row():
+        submit_btn = gr.Button("生成报告")
+    
+    with gr.Row():
+        output_markdown = gr.Markdown()
+        output_file = gr.File(label="下载报告")
+    
+    submit_btn.click(
+        fn=export_progress_by_date_range,
+        inputs=[report_type, subscription_list, days],
+        outputs=[output_markdown, output_file]
+    )
+    
+    report_type.change(
+        fn=update_subscription_list,
+        inputs=[report_type],
+        outputs=[subscription_list]
+    )
 
 if __name__ == "__main__":
     demo.launch(share=True, server_name="0.0.0.0")  # 启动界面并设置为公共可访问
